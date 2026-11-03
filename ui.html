@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design System Checker – UI Audit | Design OS</title>
+<style>
+  :root {
+    --ink: #000000; --paper: #ffffff; --mist: #e2e2e2; --mist-soft: #f5f5f5; --graphite: #595959;
+    --indigo: #4d49fc; --indigo-dark: #3a36d6;
+    --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --s4: 4px; --s8: 8px; --s12: 12px; --s16: 16px; --s20: 20px; --s24: 24px; --s32: 32px; --s48: 48px;
+    --r-sm: 6px; --r-lg: 10px; --r-xl: 16px; --r-pill: 50px;
+    --shadow: rgba(0, 0, 0, 0.1) 0px 24px 70px 0px;
+    --pad: 12px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--font-sans); font-feature-settings: "kern";
+    font-size: 14px; line-height: 1.45; letter-spacing: -0.1px;
+    color: var(--ink); background: var(--paper);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  button, select { font: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
+  .mono { font-family: var(--font-mono); font-size: 11px; line-height: 1.3; letter-spacing: 0.3px; }
+
+  /* Guide view: select a frame */
+  #guide { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; text-align: center; }
+  #guideMain { flex: 1; display: flex; flex-direction: column; }
+  .gtop { padding: 12px var(--pad) 10px; }
+  #guideErr { padding: var(--s16); }
+  #guide h2 { margin: 0 0 var(--s4); font-size: 16px; font-weight: 520; letter-spacing: -0.2px; }
+  #guide p { margin: 0 auto; max-width: 260px; color: var(--graphite); }
+
+  /* Scene: cursor selects a frame, four sections fill in */
+  .scene {
+    position: relative; flex: 1 0 176px; min-height: 176px; border-top: 1px solid var(--mist); overflow: hidden;
+    display: grid; place-items: center;
+    background-color: var(--mist-soft);
+    background-image: radial-gradient(circle, #d2d2d2 1px, transparent 1.3px); background-size: 14px 14px;
+  }
+  .fwrap { position: relative; flex: none; width: 116px; height: 132px; margin-top: 0; transform-origin: center; }
+  .fname { position: absolute; left: 0; top: -15px; font: 500 8.5px var(--font-mono); letter-spacing: .4px; color: var(--graphite); transition: color .2s; white-space: nowrap; }
+  .frame { position: absolute; inset: 0; padding: 6px; display: flex; flex-direction: column; gap: 5px; background: #fff; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+  .sec { position: relative; border-radius: 4px; background: #ececec; transition: background-color .45s ease; }
+  .sec b { position: absolute; background: #f4f1ec; border-radius: 3px; opacity: 0; transition: opacity .4s ease .15s; }
+  .s1 { height: 16px; } .s2 { height: 44px; } .s4 { height: 14px; }
+  .s3 { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; background: none; }
+  .s3 i { position: relative; border-radius: 4px; background: #ececec; transition: background-color .45s ease; }
+  .s3 b { left: 5px; top: 6px; width: 30px; height: 3px; } .s3 b + b { top: 13px; width: 18px; }
+  .t-s1 .s1 { background: var(--blue); } .t-s2 .s2 { background: var(--pink); }
+  .t-s3 .s3 i { background: var(--tan); } .t-s4 .s4 { background: var(--teal); }
+  .t-s1 .s1 b, .t-s2 .s2 b, .t-s3 .s3 b, .t-s4 .s4 b { opacity: 1; }
+  .s2 .disc { background: var(--orange); border-radius: 50%; }
+  .sel { position: absolute; inset: -3px; border: 1.5px solid var(--indigo); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .sel u { position: absolute; width: 6px; height: 6px; background: #fff; border: 1.5px solid var(--indigo); }
+  .sel u:nth-child(1) { left: -4.5px; top: -4.5px; } .sel u:nth-child(2) { right: -4.5px; top: -4.5px; }
+  .sel u:nth-child(3) { left: -4.5px; bottom: -4.5px; } .sel u:nth-child(4) { right: -4.5px; bottom: -4.5px; }
+  .dim { position: absolute; left: 50%; bottom: -22px; transform: translateX(-50%); padding: 1px 6px; border-radius: 3px; background: var(--indigo); color: #fff; font: 500 8px var(--font-mono); white-space: nowrap; opacity: 0; transition: opacity .2s .1s; }
+  .t-sel .sel, .t-sel .dim { opacity: 1; } .t-sel .fname { color: var(--indigo); }
+  .cur { position: absolute; left: 12px; top: -10px; z-index: 3; opacity: 0; transform: translate(120px, 80px); transition: transform 1.1s cubic-bezier(.3,.1,.2,1), opacity .3s; pointer-events: none; }
+  .cur svg { display: block; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.3)); }
+  .rip { position: absolute; left: -6px; top: -6px; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--indigo); opacity: 0; }
+  .scene.t-cursor .cur { opacity: 1; transform: none; }
+  .scene.t-click .cur svg { animation: press .35s ease; }
+  .scene.t-click .rip { animation: rip .55s ease-out; }
+  .scene.t-out .cur, .scene.is-final .cur { opacity: 0; }
+  @keyframes press { 40% { transform: scale(.78); } }
+  @keyframes rip { from { opacity: .9; transform: scale(.3); } to { opacity: 0; transform: scale(1.6); } }
+
+  /* Results view */
+  #results { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .verdict { display: flex; align-items: center; gap: 12px; margin: 12px var(--pad) 0; padding: 12px; border-radius: var(--r-xl); background: var(--paper); box-shadow: var(--shadow); }
+  .ring { --pct: 0; flex: none; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--ink) calc(var(--pct) * 1%), var(--mist) 0); transition: background .4s ease; }
+  .ring::before { content: ""; grid-area: 1 / 1; width: 46px; height: 46px; border-radius: 50%; background: var(--paper); }
+  .ring b { grid-area: 1 / 1; position: relative; font-size: 18px; font-weight: 520; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+  .vtext { min-width: 0; }
+  .tag { display: inline-block; padding: 1px 9px; margin-bottom: var(--s4); border: 1px solid var(--ink); border-radius: var(--r-pill); }
+  .tag.ready { background: var(--ink); color: var(--paper); }
+  .verdict h3 { margin: 0; font-size: 16px; line-height: 1.3; font-weight: 520; letter-spacing: -0.3px; }
+  .verdict p { margin: 2px 0 0; color: var(--graphite); font-size: 12px; }
+  .filters { display: flex; gap: 6px; padding: 10px var(--pad) 6px; overflow-x: auto; scrollbar-width: none; }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip { flex: none; border: 1px solid var(--mist); background: transparent; border-radius: var(--r-pill); padding: 4px 10px; white-space: nowrap; }
+  .chip:hover { border-color: var(--ink); }
+  .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .chip .n { margin-left: 6px; font-family: var(--font-mono); font-size: 11px; opacity: .65; }
+  #list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--s8) var(--s8); }
+  .group h2 { position: sticky; top: 0; z-index: 1; margin: 0; padding: var(--s12) var(--s8) var(--s4); font-size: 13px; line-height: 1.4; font-weight: 520; color: var(--graphite); background: var(--paper); }
+  .group h2 span { margin-left: var(--s8); font-family: var(--font-mono); font-size: 11px; font-weight: 400; }
+  .item { display: flex; align-items: flex-start; gap: var(--s12); padding: var(--s8); border-radius: var(--r-lg); }
+  .item:hover, .item:focus-within { background: var(--mist-soft); }
+  .reason { display: block; color: var(--graphite); font-size: 12px; line-height: 1.45; margin-top: 4px; }
+  .sugg .lab { flex-basis: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .opt { overflow-wrap: anywhere; text-align: left; }
+  .sev { width: 10px; height: 10px; margin-top: 6px; border-radius: 50%; flex: none; border: 1.5px solid var(--ink); }
+  .sev.error { background: var(--ink); }
+  .pick { display: block; width: 100%; min-width: 0; text-align: left; border: 0; background: transparent; padding: 0; }
+  .pick .msg { display: block; }
+  .pick .where { display: block; margin-top: 2px; color: var(--graphite); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note { padding: var(--s8); color: var(--graphite); }
+  .linkbtn.sm { margin: 0; padding: 2px 6px; font-size: 12px; }
+  .body { flex: 1; min-width: 0; }
+  .sugg { margin-top: var(--s8); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .sugg .lab, .nomatch { color: var(--graphite); font-size: 12px; }
+  .opt { display: inline-flex; gap: 6px; border: 1px solid var(--mist); background: var(--paper); border-radius: var(--r-pill); padding: 3px 10px; font-size: 12px; }
+  .opt.top { border-color: var(--indigo); }
+  .opt:hover { border-color: var(--indigo); color: var(--indigo); }
+  .opt .sc { font-family: var(--font-mono); opacity: .6; }
+  .item.pending { opacity: .5; pointer-events: none; }
+  .hints { margin: 6px var(--pad) 0; color: var(--graphite); font-size: 11px; line-height: 1.4; }
+  .hints p { margin: 2px 0 0; }
+  .hl { display: flex; align-items: center; gap: var(--s4); }
+  .hl .icon-btn { margin-left: -8px; }
+  .toast { margin: 0 var(--pad) var(--s8); padding: 8px 12px; border-radius: var(--r-lg); background: var(--ink); color: var(--paper); font-size: 12px; }
+  .linkbtn { align-self: center; margin: 0 0 var(--s4); border: 0; background: transparent; color: var(--graphite); text-decoration: underline; padding: 4px 8px; }
+  .linkbtn:hover { color: var(--ink); }
+
+  /* Actions: Scan (guide) or Copy report (results) */
+  .actions { display: flex; align-items: center; gap: 8px; padding: 9px var(--pad); }
+  select { appearance: none; -webkit-appearance: none; border: 0; border-radius: var(--r-lg); padding: 10px 28px 10px 12px; color: var(--ink);
+    background: var(--mist-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%23000' stroke-width='1.5'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 10px center; }
+  .btn { border: 0; border-radius: var(--r-pill); padding: 10px 12px; white-space: nowrap; font-size: 12px; font-weight: 520; transition: background .15s ease; }
+  .btn.primary { flex: 1; background: var(--indigo); color: var(--paper); }
+  .btn.primary:hover:not(:disabled) { background: var(--indigo-dark); }
+  .btn.ghost { border: 1px solid var(--mist); background: transparent; padding: 9px 12px; }
+  .btn.ghost:hover:not(:disabled) { border-color: var(--ink); }
+  .btn:disabled { opacity: .45; cursor: default; }
+
+
+  /* Compact reference inputs are always accessible, but collapsed by default. */
+  #refSettings { flex: none; border-bottom: 1px solid var(--mist); background: var(--paper); }
+  #refSettings summary { cursor: pointer; list-style: none; padding: 9px var(--pad); color: var(--graphite); font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+  #refSettings summary::-webkit-details-marker { display: none; }
+  #refSettings summary::after { content: '⌄'; font-size: 16px; line-height: 1; }
+  #refSettings[open] summary::after { transform: rotate(180deg); }
+  .ref-body { display: grid; gap: 10px; padding: 2px var(--pad) 12px; text-align: left; }
+  .ref-body label { display: block; font-size: 12px; font-weight: 600; }
+  .ref-body input { display: block; width: 100%; border: 1px solid var(--mist); border-radius: var(--r-sm); background: var(--mist-soft); padding: 8px 10px; margin-top: 4px; color: var(--ink); font: inherit; font-weight: 400; }
+  .ref-body input:focus-visible { outline: 2px solid var(--indigo); outline-offset: 1px; }
+  .ref-help { display: block; color: var(--graphite); font-size: 11px; line-height: 1.4; margin-top: 3px; font-weight: 400; }
+
+  /* Footer: Design OS */
+  footer { display: flex; align-items: center; justify-content: center; gap: 7px; flex: none; padding: 6px var(--pad); border-top: 1px solid var(--mist); color: var(--graphite); }
+  footer img { flex: none; width: 22px; height: 22px; display: block; border-radius: 6px; object-fit: cover; }
+  footer span { font-size: 12px; font-weight: 500; letter-spacing: -0.1px; }
+
+  .empty { display: flex; flex-direction: column; align-items: center; padding: 14px var(--s12) 12px; text-align: center; color: var(--graphite); }
+    .empty h3 { margin: 0 0 var(--s4); font-size: 14px; font-weight: 520; letter-spacing: -0.2px; color: var(--ink); }
+  .empty p { margin: 0; max-width: 250px; font-size: 12px; line-height: 1.4; }
+  /* Placeholder art: bold flat tiles, one per check */
+  :root { --blue:#4a72ec; --pink:#eba8a6; --tan:#b8a672; --teal:#93b3a7; --green:#2dc76d; --orange:#e55300; --yellow:#fac800; }
+  .empty .art { width: 110px; height: 110px; margin-bottom: 8px; border-radius: 14px; }
+  .empty .art.wide { height: 83px; }
+  .a-blue { fill: var(--blue); } .a-pink { fill: var(--pink); } .a-tan { fill: var(--tan); } .a-teal { fill: var(--teal); }
+  .a-green { fill: var(--green); } .a-orange { fill: var(--orange); } .a-yellow { fill: var(--yellow); stroke: var(--yellow); stroke-width: 4; stroke-linejoin: round; }
+  .a-white { fill: #f4f1ec; } .a-white-fill { fill: #fff; } .a-hole { fill: var(--blue); }
+  .a-gap { fill: var(--tan); }
+  .a-lbl { font: 500 8.5px var(--font-mono); letter-spacing: 0.5px; fill: var(--ink); }
+  .a-tick { fill: none; stroke: var(--ink); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+  .a-spin { transform-box: fill-box; transform-origin: center; animation: spin 14s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .a-spin { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .cur { display: none; } .scene * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<details id="refSettings">
+    <summary>Reference settings</summary>
+    <div class="ref-body">
+      <label for="spacing">Spacing
+        <input id="spacing" type="text" value="4, 8, 12, 16, 20, 24" placeholder="4, 8, 12, 16, 20, 24" autocomplete="off" spellcheck="false">
+        <span class="ref-help">Allowed padding, gap and margin values; anything else is off-scale.</span>
+      </label>
+      <label for="fonts">Brand fonts
+        <input id="fonts" type="text" placeholder="Inter, Söhne" autocomplete="off" spellcheck="false">
+        <span class="ref-help">Only these font families are allowed; all others are flagged.</span>
+      </label>
+    </div>
+  </details>
+
+  <section id="guide">
+    <div id="guideMain">
+      <div class="gtop">
+        <h2 id="gTitle">Select a frame or section to review.</h2>
+        <p id="gText">Find colors, fonts and spacing that miss your design system.</p>
+      </div>
+      <div class="scene" id="scene" aria-hidden="true">
+        <div class="fwrap">
+          <div class="fname">Login</div>
+          <div class="frame">
+            <div class="sec s1"><b style="left:5px;top:5px;width:6px;height:6px;border-radius:50%"></b><b style="left:15px;top:6.5px;width:26px;height:3px"></b></div>
+            <div class="sec s2"><b class="disc" style="left:9px;top:11px;width:22px;height:22px"></b><b style="left:40px;top:14px;width:46px;height:4px"></b><b style="left:40px;top:24px;width:30px;height:4px"></b></div>
+            <div class="s3"><i><b></b><b></b></i><i><b></b><b></b></i></div>
+            <div class="sec s4"><b style="left:24px;top:4.5px;width:5px;height:5px;border-radius:50%"></b><b style="left:55px;top:4.5px;width:5px;height:5px;border-radius:50%"></b><b style="left:86px;top:4.5px;width:5px;height:5px;border-radius:50%"></b></div>
+          </div>
+          <div class="sel"><u></u><u></u><u></u><u></u></div>
+          <div class="dim">393 × 852</div>
+          <div class="cur"><span class="rip"></span>
+            <svg width="18" height="20" viewBox="0 0 18 20" aria-hidden="true"><path d="M2 1.5v14l3.9-3.6 2.6 5.9 2.5-1.1-2.6-5.8 5.4-.1z" fill="#000" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="guideErr" hidden></div>
+  </section>
+
+  <section id="results" hidden>
+    <div class="verdict">
+      <div class="ring" id="ring" role="img" aria-label="Score"><b id="score">–</b></div>
+      <div class="vtext">
+        <span class="tag mono" id="tag">Not scanned</span>
+        <h3 id="vTitle">Selection review</h3>
+        <p id="vSub">Select a frame or section to review.</p>
+      </div>
+    </div>
+    <div class="hints" id="hints" hidden></div>
+    <div class="filters" id="filters" hidden></div>
+    <div id="list"></div>
+    <div class="toast" id="toast" role="status" hidden></div>
+  </section>
+  <div class="actions" id="resRow" hidden>
+    <button class="btn ghost" id="clear" hidden>Clear</button>
+    <button class="btn ghost" id="copy">Copy report</button>
+    <button class="btn primary" id="mark">Mark on canvas</button>
+  </div>
+  <footer><img src="data:image/png;base64,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" width="28" height="28" alt="" aria-hidden="true"><span>Built by Design OS</span></footer>
+
+<script>
+  var LABELS = { color: 'Color', typography: 'Typography', spacing: 'Spacing' };
+  var ORDER = ['color', 'typography', 'spacing'];
+  var CAP = 200;
+
+  var hasSelection = false;
+  var filter = 'all';
+  var result = null;
+  var marked = false;
+  var toastTimer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  function send(msg) { parent.postMessage({ pluginMessage: msg }, '*'); }
+
+  /* Placeholder art for empty states */
+  var ART = {
+    clean: `<svg class="art wide" viewBox="0 0 160 120" aria-hidden="true"><clipPath id="c1"><rect width="160" height="120" rx="14"/></clipPath><g clip-path="url(#c1)"><rect class="a-teal" width="160" height="120"/><text class="a-lbl" x="10" y="18">READY</text><g transform="translate(80 70) scale(1.05)"><polygon class="a-yellow" points="0.0,-30.0 3.6,-13.5 15.0,-26.0 9.9,-9.9 26.0,-15.0 13.5,-3.6 30.0,0.0 13.5,3.6 26.0,15.0 9.9,9.9 15.0,26.0 3.6,13.5 0.0,30.0 -3.6,13.5 -15.0,26.0 -9.9,9.9 -26.0,15.0 -13.5,3.6 -30.0,0.0 -13.5,-3.6 -26.0,-15.0 -9.9,-9.9 -15.0,-26.0 -3.6,-13.5"/></g><path class="a-tick" d="M68 70l9 9 17-19"/></g></svg>`,
+    filtered: `<svg class="art wide" viewBox="0 0 160 120" aria-hidden="true"><clipPath id="c1"><rect width="160" height="120" rx="14"/></clipPath><g clip-path="url(#c1)"><rect class="a-tan" width="160" height="120"/><text class="a-lbl" x="10" y="18">NO MATCHES</text><g transform="translate(80 70) scale(1.05)"><g class="a-white"><rect x="-14" y="-28" width="10" height="56" rx="5"/><rect x="4" y="-28" width="10" height="56" rx="5"/><rect x="-28" y="-14" width="56" height="10" rx="5"/><rect x="-28" y="4" width="56" height="10" rx="5"/></g></g><rect class="a-gap" x="62" y="52" width="36" height="36" rx="10"/><path class="a-tick" d="M71 70h18"/></g></svg>`,
+    error: `<svg class="art wide" viewBox="0 0 160 120" aria-hidden="true"><clipPath id="c1"><rect width="160" height="120" rx="14"/></clipPath><g clip-path="url(#c1)"><rect class="a-pink" width="160" height="120"/><text class="a-lbl" x="10" y="18">ERROR</text><g transform="translate(80 70) scale(1.05)"><g class="a-orange"><rect x="-15" y="-29" width="6" height="14" rx="3"/><rect x="-15" y="15" width="6" height="14" rx="3"/><rect x="-29" y="-15" width="14" height="6" rx="3"/><rect x="15" y="-15" width="14" height="6" rx="3"/><rect x="-3" y="-29" width="6" height="14" rx="3"/><rect x="-3" y="15" width="6" height="14" rx="3"/><rect x="-29" y="-3" width="14" height="6" rx="3"/><rect x="15" y="-3" width="14" height="6" rx="3"/><rect x="9" y="-29" width="6" height="14" rx="3"/><rect x="9" y="15" width="6" height="14" rx="3"/><rect x="-29" y="9" width="14" height="6" rx="3"/><rect x="15" y="9" width="14" height="6" rx="3"/><rect x="-20" y="-20" width="40" height="40" rx="9"/></g></g><rect class="a-white-fill" x="76.5" y="58" width="7" height="20" rx="3.5"/><circle class="a-white-fill" cx="80" cy="86" r="4"/></g></svg>`
+  };
+  function emptyState(kind, title, text) {
+    var d = document.createElement('div');
+    d.className = 'empty';
+    d.innerHTML = ART[kind];
+    var h = document.createElement('h3');
+    h.textContent = title;
+    var p = document.createElement('p');
+    p.textContent = text;
+    d.appendChild(h);
+    d.appendChild(p);
+    return d;
+  }
+
+  /* Scene: a cursor selects the frame, then four sections fill in. Loops until a frame is selected. */
+  var scene = $('scene');
+  var sceneTimers = [];
+  var sceneMode = '';
+  var reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var STEPS = [[300, 't-cursor'], [1500, 't-click'], [1750, 't-sel'], [2250, 't-s1'], [2600, 't-s2'], [2950, 't-s3'], [3300, 't-s4'], [3700, 't-out']];
+  function later(fn, ms) { sceneTimers.push(setTimeout(fn, ms)); }
+  function sceneStop() { sceneTimers.forEach(clearTimeout); sceneTimers = []; }
+  function scenePlay() {
+    sceneStop();
+    scene.className = 'scene';
+    STEPS.forEach(function (s) {
+      later(function () {
+        scene.classList.add(s[1]);
+        if (s[1] === 't-click') later(function () { scene.classList.remove('t-click'); }, 600);
+      }, s[0]);
+    });
+    later(function () { scene.className = 'scene'; later(scenePlay, 700); }, 7000);
+  }
+  function sceneFinal() { sceneStop(); scene.className = 'scene t-sel t-s1 t-s2 t-s3 t-s4 is-final'; }
+  function syncScene(final) {
+    var want = (reduce || final) ? 'final' : 'play';
+    if (want === sceneMode) return;
+    sceneMode = want;
+    if (want === 'final') sceneFinal(); else scenePlay();
+  }
+
+  function fitScene() {
+    var h = scene.clientHeight, w = scene.clientWidth;
+    if (!h) return;
+    // Include the cursor's entire travel, frame title and dimension label in bounds.
+    var k = Math.max(0.45, Math.min(1.4, (h - 56) / 180, (w - 44) / 270));
+    document.querySelector('.fwrap').style.transform = 'scale(' + k.toFixed(3) + ')';
+  }
+  window.addEventListener('resize', fitScene);
+
+  function fontList() {
+    return $('fonts').value.split(',').map(function (f) { return f.trim(); }).filter(Boolean);
+  }
+  function spacingList() { return $('spacing').value.split(',').map(function (v) { return Number(v.trim()); }).filter(function (v) { return Number.isFinite(v) && v > 0; }); }
+  function saveSettings() { send({ type: 'settings', settings: { spacing: spacingList(), fonts: fontList() } }); }
+
+  function toast(text) {
+    var t = $('toast');
+    t.textContent = text;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 5000);
+  }
+
+  function renderFix(i) {
+    var f = i.fix, box = document.createElement('div');
+    box.className = 'sugg';
+    if (!f.options || !f.options.length) {
+      var n = document.createElement('span');
+      n.className = 'nomatch';
+      n.textContent = f.kind === 'token' ? 'No color variable available' : f.kind === 'style' ? 'No matching text style available' : 'No suggested fix available';
+      box.appendChild(n);
+      return box;
+    }
+    var first = f.options[0], lab = document.createElement('span');
+    lab.className = 'lab';
+    lab.textContent = (f.kind === 'token' ? 'Nearest variable: ' : f.kind === 'style' ? 'Suggested text style: ' : 'Nearest value: ') + first.name;
+    box.appendChild(lab);
+    var b = document.createElement('button');
+    b.className = 'opt top';
+    b.textContent = f.kind === 'token' ? 'Bind to nearest variable' : f.kind === 'value' ? 'Snap to nearest value' : 'Apply text style';
+    b.onclick = function () {
+      send({ type: 'apply', key: i.key, optionId: first.id });
+      var row = b.closest('.item');
+      if (row) row.classList.add('pending');
+    };
+    box.appendChild(b);
+    return box;
+  }
+
+  function renderGuide() {
+    $('gTitle').textContent = hasSelection ? 'Reviewing selection…' : 'Select a frame or section to review.';
+    $('gText').textContent = hasSelection
+      ? 'Checking colors, typography and spacing in your selection.'
+      : 'Find colors, fonts and spacing that miss your design system.';
+    syncScene(hasSelection);
+    fitScene();
+  }
+
+  function showGuideError() {
+    $('guideMain').hidden = true;
+    var box = $('guideErr');
+    box.innerHTML = '';
+    box.appendChild(emptyState('error', 'The check couldn’t finish', 'Select a frame or section to try again.'));
+    box.hidden = false;
+  }
+  function clearGuideError() { $('guideErr').hidden = true; $('guideMain').hidden = false; }
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+
+  function renderView() {
+    var has = !!result;
+    $('guide').hidden = has;
+    $('results').hidden = !has;
+    $('resRow').hidden = !has;
+    fitScene();
+  }
+
+  function renderVerdict() {
+    var tag = $('tag');
+    tag.className = 'tag mono';
+    if (!result) {
+      tag.textContent = 'Not scanned';
+      $('score').textContent = '–';
+      $('ring').style.setProperty('--pct', 0);
+      return;
+    }
+    if (result.scanned === 0) {
+      tag.textContent = 'Nothing scanned';
+      $('score').textContent = '–';
+      $('ring').style.setProperty('--pct', 0);
+      $('ring').setAttribute('aria-label', 'No score');
+      $('vTitle').textContent = 'Nothing to check';
+      $('vSub').textContent = 'Select a frame or section to review.';
+      return;
+    }
+    $('score').textContent = result.score;
+    $('ring').style.setProperty('--pct', result.score);
+    $('ring').setAttribute('aria-label', 'System fit ' + result.score + ' out of 100');
+    var total = result.errors + result.warns;
+    if (total === 0) {
+      tag.classList.add('ready'); tag.textContent = 'Clean';
+      $('vTitle').textContent = 'No issues found';
+      $('vSub').textContent = 'Nothing drifts in ' + plural(result.scanned, 'layer') + '.';
+    } else if (result.ready) {
+      tag.classList.add('ready'); tag.textContent = 'Clean';
+      $('vTitle').textContent = 'Almost clean';
+      $('vSub').textContent = plural(total, 'minor drift') + ' left to review.';
+    } else {
+      tag.textContent = 'Issues found';
+      $('vTitle').textContent = 'Design-system drift found';
+      $('vSub').textContent = plural(result.errors, 'error') + ' and ' + plural(result.warns, 'warning') + ' to fix.';
+    }
+  }
+
+  function renderFilters() {
+    var box = $('filters');
+    box.innerHTML = '';
+    if (!result) { box.hidden = true; return; }
+    box.hidden = false;
+    var total = result.errors + result.warns;
+    var defs = [['all', 'All', total]].concat(ORDER.map(function (k) { return [k, LABELS[k], result.counts[k]]; }));
+    defs.forEach(function (d) {
+      var b = document.createElement('button');
+      b.className = 'chip';
+      b.setAttribute('aria-pressed', String(filter === d[0]));
+      b.textContent = d[1];
+      var n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = d[2];
+      b.appendChild(n);
+      b.onclick = function () { filter = d[0]; renderFilters(); renderList(); };
+      box.appendChild(b);
+    });
+  }
+
+  function renderList() {
+    var list = $('list');
+    list.innerHTML = '';
+    if (!result) return;
+    var issues = result.issues.filter(function (i) { return filter === 'all' || i.check === filter; });
+    if (!issues.length) {
+      list.appendChild(result.issues.length
+        ? emptyState('filtered', 'Nothing in this category', 'Pick another filter to see the rest.')
+        : result.scanned === 0
+          ? emptyState('filtered', 'No eligible layers', 'Select a frame or section to review. Instances and library components are skipped.')
+          : emptyState('clean', 'No issues', 'Everything here matches your design system.'));
+      return;
+    }
+    ORDER.forEach(function (check) {
+      var items = issues.filter(function (i) { return i.check === check; });
+      if (!items.length) return;
+      var g = document.createElement('section');
+      g.className = 'group';
+      var h = document.createElement('h2');
+      h.textContent = LABELS[check];
+      var c = document.createElement('span');
+      c.textContent = items.length;
+      h.appendChild(c);
+      g.appendChild(h);
+      items.slice(0, CAP).forEach(function (i) { g.appendChild(renderItem(i)); });
+      if (items.length > CAP) {
+        var more = document.createElement('div');
+        more.className = 'note';
+        more.textContent = (items.length - CAP) + ' more not shown. Review the visible findings for the rest.';
+        g.appendChild(more);
+      }
+      list.appendChild(g);
+    });
+  }
+
+  function renderItem(i) {
+    var row = document.createElement('div');
+    row.className = 'item';
+    var sev = document.createElement('span');
+    sev.className = 'sev ' + i.severity;
+    sev.title = i.severity === 'error' ? 'Error' : 'Warning';
+    sev.setAttribute('aria-hidden', 'true');
+    var pick = document.createElement('button');
+    pick.className = 'pick';
+    var m = document.createElement('span');
+    m.className = 'msg';
+    m.textContent = i.message;
+    var w = document.createElement('span');
+    w.className = 'where mono';
+    w.textContent = 'Layer: ' + i.layer + (i.frame && i.frame !== i.layer ? ' · ' + i.frame : '');
+    pick.appendChild(m);
+    pick.appendChild(w);
+    var reason = document.createElement('span');
+    reason.className = 'reason';
+    reason.textContent = i.reason || i.message;
+    pick.appendChild(reason);
+    pick.onclick = function () { send({ type: 'select', id: i.nodeId }); };
+    var body = document.createElement('div');
+    body.className = 'body';
+    body.appendChild(pick);
+    if (i.fix) body.appendChild(renderFix(i));
+    row.appendChild(sev);
+    row.appendChild(body);
+    return row;
+  }
+
+  function renderFooter() {
+    $('copy').disabled = !result;
+    $('copy').className = 'btn ghost';
+    $('mark').hidden = marked;
+    $('mark').disabled = !result || !result.issues.length;
+    $('clear').hidden = !marked;
+  }
+
+  function renderHints() {
+    var box = $('hints');
+    box.innerHTML = '';
+    var hints = (result && result.hints) || [];
+    box.hidden = !hints.length;
+    hints.forEach(function (h) {
+      var p = document.createElement('p');
+      p.textContent = h;
+      box.appendChild(p);
+    });
+  }
+
+  function render() { renderView(); renderVerdict(); renderHints(); renderFilters(); renderList(); renderFooter(); }
+
+  function report() {
+    if (!result) return '';
+    var names = (result.selectionNames || []).join(', ');
+    var lines = ['Design System Checker — UI Audit | Design OS — Selection review', 'Selection: ' + names, 'Score: ' + result.score + '/100', ''];
+    ORDER.forEach(function (check) {
+      var items = result.issues.filter(function (i) { return i.check === check; });
+      if (!items.length) return;
+      lines.push(LABELS[check] + ' (' + items.length + ')');
+      items.forEach(function (i) {
+        lines.push('Layer: ' + i.layer + (i.frame && i.frame !== i.layer ? ' / ' + i.frame : ''));
+        lines.push('Issue: ' + i.message);
+        lines.push('Reason: ' + (i.reason || i.message));
+        lines.push('Suggested fix: ' + (i.fix && i.fix.options && i.fix.options.length
+          ? (i.fix.kind === 'token' ? 'Bind to nearest variable: ' : i.fix.kind === 'value' ? 'Snap to nearest value: ' : 'Apply text style: ') + i.fix.options[0].name
+          : 'No available matching fix'));
+        lines.push('');
+      });
+    });
+    if (!result.issues.length) lines.push('No issues found in the selected frame or section.');
+    return lines.join('\n');
+  }
+
+  function copyText(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  $('spacing').onchange = saveSettings;
+  $('fonts').onchange = saveSettings;
+  $('copy').onclick = function () {
+    var ok = copyText(report());
+    $('copy').textContent = ok ? 'Copied' : 'Copy failed';
+    setTimeout(function () { $('copy').textContent = 'Copy report'; }, 1500);
+  };
+  $('mark').onclick = function () {
+    if (!result) return;
+    send({ type: 'mark', keys: result.issues.map(function (i) { return i.key; }) });
+    $('mark').disabled = true;
+  };
+  $('clear').onclick = function () { send({ type: 'clear-marks' }); };
+
+  onmessage = function (event) {
+    var msg = event.data && event.data.pluginMessage;
+    if (!msg) return;
+    if (msg.type === 'init') {
+      if (msg.settings && msg.settings.spacing) $('spacing').value = msg.settings.spacing.join(', ');
+      if (msg.settings && msg.settings.fonts) $('fonts').value = msg.settings.fonts.join(', ');
+      renderGuide();
+    } else if (msg.type === 'selection-reset') {
+      result = null;
+      marked = false;
+      hasSelection = true;
+      filter = 'all';
+      clearGuideError();
+      render(); renderGuide();
+    } else if (msg.type === 'empty-selection') {
+      result = null;
+      marked = false;
+      hasSelection = false;
+      clearGuideError();
+      render(); renderGuide();
+    } else if (msg.type === 'result') {
+      result = msg;
+      marked = false;
+      hasSelection = true;
+      if (filter !== 'all' && !msg.counts[filter]) filter = 'all';
+      render();
+    } else if (msg.type === 'notice') {
+      toast(msg.message);
+    } else if (msg.type === 'marked') {
+      marked = msg.count > 0;
+      renderFooter();
+      toast('Marked ' + msg.count + ' layers' + (msg.overlay ? ' (' + msg.overlay + ' using overlay boxes)' : '') + '.');
+    } else if (msg.type === 'cleared') {
+      marked = false;
+      renderFooter();
+      toast('Marks removed.');
+    } else if (msg.type === 'applied') {
+      if (msg.ok) toast((msg.message || 'Applied.') + ' Undo with ⌘Z or Ctrl+Z.');
+      else { renderList(); toast(msg.message || 'Couldn’t apply that fix.'); }
+    } else if (msg.type === 'error') {
+      if (window.console) console.error(msg.message);
+      result = null;
+      render();
+      showGuideError();
+    }
+  };
+
+  renderGuide();
+  render();
+  send({ type: 'ready' });
+</script>
+
+</body>
+</html>
